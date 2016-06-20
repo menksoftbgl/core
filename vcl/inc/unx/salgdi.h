@@ -55,6 +55,7 @@ class X11OpenGLSalVirtualDevice;
 class ServerFont;
 class ImplLayoutArgs;
 class ServerFontLayout;
+class CommonSalLayout;
 class PhysicalFontCollection;
 class PhysicalFontFace;
 class SalGraphicsImpl;
@@ -155,6 +156,7 @@ public:
     virtual bool                    GetGlyphOutline( sal_GlyphId nIndex, basegfx::B2DPolyPolygon& ) override;
     virtual SalLayout*              GetTextLayout( ImplLayoutArgs&, int nFallbackLevel ) override;
     virtual void                    DrawServerFontLayout( const ServerFontLayout& ) override;
+    virtual void                    DrawCommonSalLayout( const CommonSalLayout& ) override;
 
     virtual bool                    supportsOperation( OutDevSupportType ) const override;
     virtual void                    drawPixel( long nX, long nY ) override;

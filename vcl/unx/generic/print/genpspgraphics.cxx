@@ -767,6 +767,11 @@ void GenPspGraphics::DrawServerFontLayout( const ServerFontLayout& rLayout )
     DrawPrinterLayout( rLayout, *m_pPrinterGfx, true );
 }
 
+void GenPspGraphics::DrawCommonSalLayout( const CommonSalLayout& /*rLayout*/ )
+{
+    // TODO
+}
+
 const FontCharMapPtr GenPspGraphics::GetFontCharMap() const
 {
     if( !m_pServerFont[0] )

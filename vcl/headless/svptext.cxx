@@ -121,6 +121,11 @@ void SvpSalGraphics::DrawServerFontLayout( const ServerFontLayout& rSalLayout )
     m_aTextRenderImpl.DrawServerFontLayout(rSalLayout );
 }
 
+void SvpSalGraphics::DrawCommonSalLayout( const CommonSalLayout& rSalLayout )
+{
+    m_aTextRenderImpl.DrawCommonSalLayout( rSalLayout );
+}
+
 void SvpSalGraphics::SetTextColor( SalColor nSalColor )
 {
     m_aTextRenderImpl.SetTextColor(nSalColor);

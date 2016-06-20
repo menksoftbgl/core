@@ -56,6 +56,10 @@ void X11SalGraphics::DrawServerFontLayout( const ServerFontLayout& rLayout )
 {
     mxTextRenderImpl->DrawServerFontLayout(rLayout);
 }
+void X11SalGraphics::DrawCommonSalLayout( const CommonSalLayout& rLayout )
+{
+    mxTextRenderImpl->DrawCommonSalLayout(rLayout);
+}
 
 const FontCharMapPtr X11SalGraphics::GetFontCharMap() const
 {

@@ -44,6 +44,7 @@ class FontSubsetInfo;
 class OpenGLContext;
 class OutputDevice;
 class ServerFontLayout;
+class CommonSalLayout;
 struct SystemGraphicsData;
 
 #if ENABLE_CAIRO_CANVAS
@@ -218,6 +219,7 @@ public:
 
     virtual SalLayout*          GetTextLayout( ImplLayoutArgs&, int nFallbackLevel ) = 0;
     virtual void                DrawServerFontLayout( const ServerFontLayout& ) = 0;
+    virtual void                DrawCommonSalLayout( const CommonSalLayout& ) = 0;
 
     virtual bool                supportsOperation( OutDevSupportType ) const = 0;
 

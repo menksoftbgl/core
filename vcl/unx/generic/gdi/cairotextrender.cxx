@@ -42,6 +42,7 @@
 
 #include <cairo.h>
 #include <cairo-ft.h>
+#include "CommonSalLayout.hxx"
 
 CairoTextRender::CairoTextRender()
     : mnTextColor(MAKE_SALCOLOR(0x00, 0x00, 0x00)) //black
@@ -152,6 +153,178 @@ namespace
     }
 }
 
+void CairoTextRender::DrawCommonSalLayout( const CommonSalLayout& rLayout )
+{
+    std::vector<cairo_glyph_t> cairo_glyphs;
+    std::vector<int> glyph_extrarotation;
+    cairo_glyphs.reserve( 256 );
+
+    Point aPos;
+    sal_GlyphId aGlyphId;
+    for( int nStart = 0; rLayout.GetNextGlyphs( 1, &aGlyphId, aPos, nStart ); )
+    {
+        cairo_glyph_t aGlyph;
+        aGlyph.index = aGlyphId & GF_IDXMASK;
+        aGlyph.x = aPos.X();
+        aGlyph.y = aPos.Y();
+        cairo_glyphs.push_back(aGlyph);
+
+        switch (aGlyphId & GF_ROTMASK)
+        {
+            case GF_ROTL:    // left
+                glyph_extrarotation.push_back(1);
+                break;
+            case GF_ROTR:    // right
+                glyph_extrarotation.push_back(-1);
+                break;
+            default:
+                glyph_extrarotation.push_back(0);
+                break;
+        }
+    }
+
+    if (cairo_glyphs.empty())
+        return;
+
+    ServerFont& rFont = rLayout.GetServerFont();
+    const FontSelectPattern& rFSD = rFont.GetFontSelData();
+    int nHeight = rFSD.mnHeight;
+    int nWidth = rFSD.mnWidth ? rFSD.mnWidth : nHeight;
+    if (nWidth == 0 || nHeight == 0)
+        return;
+
+    cairo_t *cr = getCairoContext();
+    if (!cr)
+    {
+        SAL_WARN("vcl", "no cairo context for text");
+        return;
+    }
+
+    ImplSVData* pSVData = ImplGetSVData();
+    if (const cairo_font_options_t* pFontOptions = pSVData->mpDefInst->GetCairoFontOptions())
+        cairo_set_font_options(cr, pFontOptions);
+
+    double nDX, nDY;
+    getSurfaceOffset(nDX, nDY);
+    cairo_translate(cr, nDX, nDY);
+
+    clipRegion(cr);
+
+    cairo_set_source_rgb(cr,
+        SALCOLOR_RED(mnTextColor)/255.0,
+        SALCOLOR_GREEN(mnTextColor)/255.0,
+        SALCOLOR_BLUE(mnTextColor)/255.0);
+
+    FT_Face aFace = rFont.GetFtFace();
+    CairoFontsCache::CacheId aId;
+    aId.maFace = aFace;
+    aId.mpOptions = rFont.GetFontOptions().get();
+    aId.mbEmbolden = rFont.NeedsArtificialBold();
+
+    cairo_matrix_t m;
+
+    std::vector<int>::const_iterator aEnd = glyph_extrarotation.end();
+    std::vector<int>::const_iterator aStart = glyph_extrarotation.begin();
+    std::vector<int>::const_iterator aI = aStart;
+    while (aI != aEnd)
+    {
+        int nGlyphRotation = *aI;
+
+        std::vector<int>::const_iterator aNext = nGlyphRotation?(aI+1):std::find_if(aI+1, aEnd, hasRotation);
+
+        size_t nStartIndex = std::distance(aStart, aI);
+        size_t nLen = std::distance(aI, aNext);
+
+        aId.mbVerticalMetrics = nGlyphRotation != 0.0;
+        cairo_font_face_t* font_face = static_cast<cairo_font_face_t*>(CairoFontsCache::FindCachedFont(aId));
+        if (!font_face)
+        {
+            const FontConfigFontOptions *pOptions = rFont.GetFontOptions().get();
+            void *pPattern = pOptions ? pOptions->GetPattern(aFace, aId.mbEmbolden) : nullptr;
+            if (pPattern)
+                font_face = cairo_ft_font_face_create_for_pattern(static_cast<FcPattern*>(pPattern));
+            if (!font_face)
+                font_face = cairo_ft_font_face_create_for_ft_face(reinterpret_cast<FT_Face>(aFace), rFont.GetLoadFlags());
+            CairoFontsCache::CacheFont(font_face, aId);
+        }
+        cairo_set_font_face(cr, font_face);
+
+        cairo_set_font_size(cr, nHeight);
+
+        cairo_matrix_init_identity(&m);
+
+        if (rLayout.GetOrientation())
+            cairo_matrix_rotate(&m, toRadian(rLayout.GetOrientation()));
+
+        cairo_matrix_scale(&m, nWidth, nHeight);
+
+        if (nGlyphRotation)
+        {
+            cairo_matrix_rotate(&m, toRadian(nGlyphRotation*900));
+
+            cairo_matrix_t em_square;
+            cairo_matrix_init_identity(&em_square);
+            cairo_get_matrix(cr, &em_square);
+
+            cairo_matrix_scale(&em_square, aFace->units_per_EM,
+                aFace->units_per_EM);
+            cairo_set_matrix(cr, &em_square);
+
+            cairo_font_extents_t font_extents;
+            cairo_font_extents(cr, &font_extents);
+
+            cairo_matrix_init_identity(&em_square);
+            cairo_set_matrix(cr, &em_square);
+
+            //gives the same positions as pre-cairo conversion, but I don't
+            //like them
+            double xdiff = 0.0;
+            double ydiff = 0.0;
+            if (nGlyphRotation == 1)
+            {
+                ydiff = font_extents.ascent/nHeight;
+                xdiff = -font_extents.descent/nHeight;
+            }
+            else if (nGlyphRotation == -1)
+            {
+                cairo_text_extents_t text_extents;
+                cairo_glyph_extents(cr, &cairo_glyphs[nStartIndex], nLen,
+                    &text_extents);
+
+                xdiff = -text_extents.x_advance/nHeight;
+                //to restore an apparent bug in the original X11 impl, replace
+                //nHeight with nWidth below
+                xdiff += font_extents.descent/nHeight;
+            }
+            cairo_matrix_translate(&m, xdiff, ydiff);
+        }
+
+        if (rFont.NeedsArtificialItalic())
+        {
+            cairo_matrix_t shear;
+            cairo_matrix_init_identity(&shear);
+            shear.xy = -shear.xx * 0x6000L / 0x10000L;
+            cairo_matrix_multiply(&m, &shear, &m);
+        }
+
+        cairo_set_font_matrix(cr, &m);
+        cairo_show_glyphs(cr, &cairo_glyphs[nStartIndex], nLen);
+
+#if OSL_DEBUG_LEVEL > 2
+        //draw origin
+        cairo_save (cr);
+        cairo_rectangle (cr, cairo_glyphs[nStartIndex].x, cairo_glyphs[nStartIndex].y, 5, 5);
+        cairo_set_source_rgba (cr, 1, 0, 0, 0.80);
+        cairo_fill (cr);
+        cairo_restore (cr);
+#endif
+
+        aI = aNext;
+    }
+
+    releaseCairoContext(cr);
+
+}
 void CairoTextRender::DrawServerFontLayout( const ServerFontLayout& rLayout )
 {
     std::vector<cairo_glyph_t> cairo_glyphs;
@@ -507,6 +680,9 @@ SalLayout* CairoTextRender::GetTextLayout( ImplLayoutArgs& rArgs, int nFallbackL
         }
         else
 #endif
+            if(getenv("LO_CSL"))
+            pLayout = new CommonSalLayout( *mpServerFont[ nFallbackLevel ] );
+            else
             pLayout = new ServerFontLayout( *mpServerFont[ nFallbackLevel ] );
     }
 
